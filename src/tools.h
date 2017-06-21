@@ -1,5 +1,4 @@
-#ifndef TOOLS_H_
-#define TOOLS_H_
+#pragma once
 #include <vector>
 #include "Eigen/Dense"
 
@@ -26,4 +25,4 @@ public:
 
 };
 
-#endif /* TOOLS_H_ */
+double normaliseAngle(const double angle);

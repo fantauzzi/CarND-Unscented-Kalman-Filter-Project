@@ -1,19 +1,15 @@
-#ifndef MEASUREMENT_PACKAGE_H_
-#define MEASUREMENT_PACKAGE_H_
-
+#pragma once
 #include "Eigen/Dense"
 
 class MeasurementPackage {
 public:
-  long timestamp_;
+  long long timeStamp;
 
   enum SensorType{
-    LASER,
+    LIDAR,
     RADAR
-  } sensor_type_;
+  } sensorType;
 
-  Eigen::VectorXd raw_measurements_;
+  Eigen::VectorXd rawMeasurement;
 
 };
-
-#endif /* MEASUREMENT_PACKAGE_H_ */
