@@ -1,19 +1,21 @@
 #include "ukf.h"
 #include "Eigen/Dense"
 #include <iostream>
+#include <utility>
 #include "tools.h"
 
 using namespace std;
 using Eigen::MatrixXd;
 using Eigen::VectorXd;
 using std::vector;
+using std::pair;
 
 /**
  * Initializes Unscented Kalman filter
  */
 UKF::UKF() :
 		isInitialised { false }, previousTimeStamp { 0 }, lambda { .0 }, x_n { 0 }, xAug_n {
-				0 } {
+				0 }, debug { false } {
 	// if this is false, laser measurements will be ignored (except during init)
 	useLaser = false;
 
@@ -98,6 +100,9 @@ void UKF::init(MeasurementPackage meas_package) {
 	weights(0) = lambda / (lambda + xAug_n);  // Set the first component
 	weights.bottomRows(2 * xAug_n).setConstant(1 / (2 * (lambda + xAug_n))); // Set the remaining 2*n_aug components
 
+	std_a = .2;
+	std_yawdd = .2;
+
 	// Chop chop, job done!
 	isInitialised = true;
 }
@@ -132,6 +137,17 @@ void UKF::processMeasurement(MeasurementPackage meas_package) {
 	// Calculate the time elapsed between the previous measurement and the current one, in seconds.
 	double deltaT = (meas_package.timeStamp - previousTimeStamp) / 1000000; // seconds
 
+	if (debug) {
+		x << 5.7441, 1.3800, 2.2049, 0.5015, 0.3528;
+
+		//set example covariance matrix
+		P << 0.0043, -0.0013, 0.0030, -0.0022, -0.0020, -0.0013, 0.0077, 0.0011, 0.0071, 0.0060, 0.0030, 0.0011, 0.0054, 0.0007, 0.0008, -0.0022, 0.0071, 0.0007, 0.0098, 0.0100, -0.0020, 0.0060, 0.0008, 0.0100, 0.0123;
+
+		std_a = .2;
+		std_yawdd = .2;
+
+	}
+
 	prediction(deltaT);
 
 	updateRadar(meas_package);
@@ -146,7 +162,7 @@ void UKF::processMeasurement(MeasurementPackage meas_package) {
  * measurement and this one.
  */
 
-void UKF::prediction(double deltaT) {
+MatrixXd UKF::computeSigmaPoints() {
 	/*
 	 *Generate sigma points, given state dimension, lambda, current state and current covariance matrix
 	 */
@@ -156,7 +172,7 @@ void UKF::prediction(double deltaT) {
 
 	// Now the sigma points
 
-	MatrixXd Xsig { MatrixXd(x.size(), 2 * x.size() + 1) };
+	MatrixXd Xsig { MatrixXd(x_n, 2 * x_n + 1) };
 
 	auto spread { sqrt(lambda + x_n) };
 	Xsig.col(0) = x;
@@ -165,10 +181,15 @@ void UKF::prediction(double deltaT) {
 		Xsig.col(iCol + 1 + x_n) = x - spread * A.col(iCol);
 	}
 
+	return Xsig;
+}
+
+MatrixXd UKF::computeAugmentedSigmaPoints() {
 	/* Determine augmented sigma points based on current state, covariance, noise standard deviation for
 	 * longitudinal acceleration and yaw acceleration and lambda
 	 */
 
+	lambda = 3 - xAug_n; // TODO reused the same variable name, dangerous!
 	// The augmented state
 	VectorXd xAug = VectorXd(xAug_n);
 	xAug.setZero();
@@ -195,6 +216,166 @@ void UKF::prediction(double deltaT) {
 		XsigAug.col(iCol + 1) = xAug + spreadAug * A_Aug.col(iCol);
 		XsigAug.col(iCol + 1 + xAug_n) = xAug - spreadAug * A_Aug.col(iCol);
 	}
+
+	return XsigAug;
+
+}
+
+MatrixXd UKF::predictSigmaPoints(const MatrixXd & XsigAug, double deltaT) {
+	/*
+	 * Predict sigma points based on augmented sigma points.
+	 */
+
+	//create matrix with predicted sigma points as columns
+	XsigPred = MatrixXd(x_n, 2 * xAug_n + 1);
+
+	for (auto i = 0; i < 2 * xAug_n + 1; ++i) {
+		auto v = XsigAug(2, i);
+		auto psi = XsigAug(3, i);
+		auto psiDot = XsigAug(4, i);
+		auto nu_a = XsigAug(5, i);
+		auto nu_psiDotDot = XsigAug(6, i);
+		VectorXd b { VectorXd(5) };
+		b << .5 * pow(deltaT, 2) * cos(psi) * nu_a, .5 * pow(deltaT, 2)
+				* sin(psi) * nu_a, deltaT * nu_a, .5 * pow(deltaT, 2)
+				* nu_psiDotDot, deltaT * nu_psiDotDot;
+		VectorXd a { VectorXd(5) };
+		if (psiDot == 0)
+			a << v * cos(psi) * deltaT, v * sin(psi) * deltaT, 0, psiDot
+					* deltaT, 0;
+		else
+			a << v / psiDot * (sin(psi + psiDot * deltaT) - sin(psi)), v
+					/ psiDot * (-cos(psi + psiDot * deltaT) + cos(psi)), 0, psiDot
+					* deltaT, 0;
+		XsigPred.col(i) = XsigAug.block(0, i, 5, 1) + a + b;
+	}
+
+	return XsigPred;
+
+}
+
+pair<MatrixXd, MatrixXd> UKF::predictStateAndCovariance() {
+	/*
+	 * Predict expected state and covariance, and determine weights, based on predicted sigma points
+	 */
+
+	// Predict state expected value
+	x.setZero();
+	for (auto i = 0; i < 2 * xAug_n + 1; ++i)
+		x += weights(i) * XsigPred.col(i);
+
+	// Covariance of the predicted state
+	P.setZero();
+	for (auto i = 0; i < 2 * xAug_n + 1; i++) {  //iterate over sigma points
+		// State difference
+		VectorXd x_diff = XsigPred.col(i) - x;
+		// Angle normalisation
+		x_diff(3) = normaliseAngle(x_diff(3));
+		P += weights(i) * x_diff * x_diff.transpose();
+	}
+
+	auto ret = make_pair(x, P);
+	return ret;
+
+}
+
+void UKF::test() {
+
+	MeasurementPackage initMeasurement;
+	initMeasurement.sensorType = MeasurementPackage::RADAR;
+	initMeasurement.timeStamp = 1477010443050000;
+	VectorXd rawInit(3);
+	rawInit << 1.014892e+00, 5.543292e-01, 4.892807e+00;
+	initMeasurement.rawMeasurement = rawInit;
+
+	init(initMeasurement);
+
+	x << 5.7441, 1.3800, 2.2049, 0.5015, 0.3528;
+
+	//set example covariance matrix
+	P << 0.0043, -0.0013, 0.0030, -0.0022, -0.0020, -0.0013, 0.0077, 0.0011, 0.0071, 0.0060, 0.0030, 0.0011, 0.0054, 0.0007, 0.0008, -0.0022, 0.0071, 0.0007, 0.0098, 0.0100, -0.0020, 0.0060, 0.0008, 0.0100, 0.0123;
+
+	std_a = .2;
+	std_yawdd = .2;
+
+	MatrixXd Xsig = computeSigmaPoints();
+	MatrixXd compareWith(5, 11);
+	compareWith << 5.7441, 5.85768, 5.7441, 5.7441, 5.7441, 5.7441, 5.63052, 5.7441, 5.7441, 5.7441, 5.7441, 1.38, 1.34566, 1.52806, 1.38, 1.38, 1.38, 1.41434, 1.23194, 1.38, 1.38, 1.38, 2.2049, 2.28414, 2.24557, 2.29582, 2.2049, 2.2049, 2.12566, 2.16423, 2.11398, 2.2049, 2.2049, 0.5015, 0.44339, 0.631886, 0.516923, 0.595227, 0.5015, 0.55961, 0.371114, 0.486077, 0.407773, 0.5015, 0.3528, 0.299973, 0.462123, 0.376339, 0.48417, 0.418721, 0.405627, 0.243477, 0.329261, 0.22143, 0.286879;
+	assert(Xsig.isApprox(compareWith, 0.000001));
+
+	MatrixXd XsigAug = computeAugmentedSigmaPoints();
+	compareWith = MatrixXd(7, 15);
+	// cout << "XsigAug=" << endl << XsigAug << endl;
+	compareWith << 5.7441, 5.85768, 5.7441, 5.7441, 5.7441, 5.7441, 5.7441, 5.7441, 5.63052, 5.7441, 5.7441, 5.7441, 5.7441, 5.7441, 5.7441, 1.38, 1.34566, 1.52806, 1.38, 1.38, 1.38, 1.38, 1.38, 1.41434, 1.23194, 1.38, 1.38, 1.38, 1.38, 1.38, 2.2049, 2.28414, 2.24557, 2.29582, 2.2049, 2.2049, 2.2049, 2.2049, 2.12566, 2.16423, 2.11398, 2.2049, 2.2049, 2.2049, 2.2049, 0.5015, 0.44339, 0.631886, 0.516923, 0.595227, 0.5015, 0.5015, 0.5015, 0.55961, 0.371114, 0.486077, 0.407773, 0.5015, 0.5015, 0.5015, 0.3528, 0.299973, 0.462123, 0.376339, 0.48417, 0.418721, 0.3528, 0.3528, 0.405627, 0.243477, 0.329261, 0.22143, 0.286879, 0.3528, 0.3528, 0, 0, 0, 0, 0, 0, 0.34641, 0, 0, 0, 0, 0, 0, -0.34641, 0, 0, 0, 0, 0, 0, 0, 0, 0.34641, 0, 0, 0, 0, 0, 0, -0.34641;
+	assert(XsigAug.isApprox(compareWith, 0.000001));
+
+
+	cout << "All done!" << endl;
+}
+
+void UKF::prediction(double deltaT) {
+	MatrixXd Xsig = computeSigmaPoints();
+	MatrixXd XsigAug = computeAugmentedSigmaPoints();
+	MatrixXd XsigPred = predictSigmaPoints(XsigAug, deltaT);
+	pair<MatrixXd, MatrixXd> xAnd_sigma = predictStateAndCovariance();
+}
+
+void UKF::prediction2(double deltaT) {
+	/*
+	 *Generate sigma points, given state dimension, lambda, current state and current covariance matrix
+	 */
+
+	// Get the square root of the covariance
+	MatrixXd A { P.llt().matrixL() };
+
+	// Now the sigma points
+
+	MatrixXd Xsig { MatrixXd(x.size(), 2 * x.size() + 1) };
+
+	auto spread { sqrt(lambda + x_n) };
+	Xsig.col(0) = x;
+	for (auto iCol = 0; iCol < x_n; ++iCol) {
+		Xsig.col(iCol + 1) = x + spread * A.col(iCol);
+		Xsig.col(iCol + 1 + x_n) = x - spread * A.col(iCol);
+	}
+
+	if (debug)
+		cout << "Xsig=" << endl << Xsig << endl;
+
+	/* Determine augmented sigma points based on current state, covariance, noise standard deviation for
+	 * longitudinal acceleration and yaw acceleration and lambda
+	 */
+
+	lambda = 3 - xAug_n; // TODO reused the same variable name, dangerous!
+	// The augmented state
+	VectorXd xAug = VectorXd(xAug_n);
+	xAug.setZero();
+	xAug.head(x_n) = x;
+
+	// Covariance matrix for acceleration and yaw acceleration errors
+	auto Q = MatrixXd(2, 2);
+	Q << pow(std_a, 2), 0, 0, pow(std_yawdd, 2);
+
+	// The augmented state covariance
+	MatrixXd P_Aug = MatrixXd(xAug_n, xAug_n);
+	P_Aug.setZero();
+	P_Aug.block(0, 0, x_n, x_n) = P;
+	P_Aug.block(x_n, x_n, 2, 2) = Q;
+
+	// Get square root of augmented state covariance
+	MatrixXd A_Aug = P_Aug.llt().matrixL();
+
+	//Calculate augmented sigma points
+	MatrixXd XsigAug = MatrixXd(xAug_n, 2 * xAug_n + 1);
+	auto spreadAug = sqrt(lambda + xAug_n);
+	XsigAug.col(0) = xAug;
+	for (auto iCol = 0; iCol < xAug_n; ++iCol) {
+		XsigAug.col(iCol + 1) = xAug + spreadAug * A_Aug.col(iCol);
+		XsigAug.col(iCol + 1 + xAug_n) = xAug - spreadAug * A_Aug.col(iCol);
+	}
+
+	if (debug)
+		cout << "XsigAug=" << endl << XsigAug << endl;
 
 	/*
 	 * Predict sigma points based on augmented sigma points.
