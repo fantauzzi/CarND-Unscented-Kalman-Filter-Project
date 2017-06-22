@@ -1,16 +1,16 @@
-#ifndef UKF_H
-#define UKF_H
-
+#pragma once
 #include "measurement_package.h"
 #include "Eigen/Dense"
 #include <vector>
 #include <string>
 #include <fstream>
 #include <utility>
+#include <tuple>
 
 using Eigen::MatrixXd;
 using Eigen::VectorXd;
 using std::pair;
+using std::tuple;
 
 class UKF {
 	/*
@@ -35,10 +35,10 @@ class UKF {
 	///* state covariance matrix
 	MatrixXd P;
 
-	MatrixXd S;
+	// MatrixXd S;
 
 	///* predicted sigma points matrix
-	MatrixXd XsigPred;
+	//MatrixXd XsigPred;
 
 	long long previousTimeStamp;
 
@@ -64,10 +64,10 @@ class UKF {
 	double std_radrd;
 
 	///* Weights of sigma points
-	VectorXd weights;
+	// VectorXd weights;
 
 	///* Sigma point spreading parameter
-	double lambda;
+	// double lambda;
 
 	///* State dimension
 	int x_n;
@@ -75,7 +75,7 @@ class UKF {
 	///* Augmented state dimension
 	int xAug_n;
 
-	bool debug;
+	// bool debug;
 
 	MatrixXd computeSigmaPoints();
 
@@ -83,11 +83,11 @@ class UKF {
 
 	MatrixXd predictSigmaPoints(const MatrixXd & XsigAug, double deltaT);
 
-	pair<MatrixXd, MatrixXd> predictStateAndCovariance();
+	pair<MatrixXd, MatrixXd> predictStateAndCovariance(const MatrixXd & XsigPred);
 
-	pair<VectorXd, MatrixXd> predictRadarMeasurments();
+	tuple<VectorXd, MatrixXd, MatrixXd>  predictRadarMeasurments(const MatrixXd & XsigPred);
 
-	pair<VectorXd, MatrixXd> updateStateWithRadarMeasurements(const MeasurementPackage & meas_package, const VectorXd & zPred, const MatrixXd & Zsig);
+	pair<VectorXd, MatrixXd> updateStateWithRadarMeasurements(const MeasurementPackage & meas_package, const VectorXd & zPred, const MatrixXd & Zsig, const MatrixXd & S, const MatrixXd & XsigPred);
 
 public:
 	/**
@@ -115,21 +115,4 @@ public:
 	 * matrix
 	 * @param delta_t Time between k and k+1 in s
 	 */
-	void prediction2(double delta_t);
-
-	void prediction(double delta_t);
-
-	/**
-	 * Updates the state and the state covariance matrix using a laser measurement
-	 * @param meas_package The measurement at k+1
-	 */
-	void updateLidar(MeasurementPackage meas_package);
-
-	/**
-	 * Updates the state and the state covariance matrix using a radar measurement
-	 * @param meas_package The measurement at k+1
-	 */
-	void updateRadar(MeasurementPackage meas_package);
 };
-
-#endif /* UKF_H */

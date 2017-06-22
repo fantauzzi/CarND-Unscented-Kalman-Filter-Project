@@ -44,8 +44,9 @@ int main() {
 	vector<VectorXd> estimations;
 	vector<VectorXd> ground_truth;
 
+	unsigned iteration {0};
 	h.onMessage(
-			[&ukf,&tools,&estimations,&ground_truth](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length, uWS::OpCode opCode) {
+			[&iteration, &ukf,&tools,&estimations,&ground_truth](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length, uWS::OpCode opCode) {
 				// "42" at the start of the message means there's a websocket message event.
 				// The 4 signifies a websocket message
 				// The 2 signifies a websocket event
@@ -113,7 +114,9 @@ int main() {
 							ground_truth.push_back(gt_values);
 
 							//Call ProcessMeasurment(meas_package) for Kalman filter
+							cout << "Iteration# " << iteration << endl;
 							ukf.processMeasurement(meas_package);
+							++ iteration;
 
 							//Push the current estimated x,y positon from the Kalman filter's state vector
 
