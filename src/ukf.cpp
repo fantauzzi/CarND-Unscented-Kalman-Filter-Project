@@ -19,7 +19,7 @@ using std::get;
 UKF::UKF() :
 		isInitialised { false }, previousTimeStamp { 0 }, x_n { 0 }, xAug_n { 0 } {
 	// if this is false, laser measurements will be ignored (except during init)
-	useLaser = false;
+	useLaser = true;
 
 	// if this is false, radar measurements will be ignored (except during init)
 	useRadar = true;
@@ -155,7 +155,9 @@ void UKF::processMeasurement(MeasurementPackage meas_package) {
 
 	// Update
 
-	auto predictedMeasurements = predictRadarMeasurments(XsigPred);
+	auto predictedMeasurements = (meas_package.sensorType == MeasurementPackage::RADAR)?
+			predictRadarMeasurments(XsigPred):
+			predictLidarMeasurments(XsigPred);
 	VectorXd zPred { get<0>(predictedMeasurements) };
 	MatrixXd Zsig { get<1>(predictedMeasurements) };
 	MatrixXd S { get<2>(predictedMeasurements) };
