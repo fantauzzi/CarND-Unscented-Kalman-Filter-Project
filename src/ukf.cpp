@@ -141,7 +141,7 @@ void UKF::processMeasurement(MeasurementPackage meas_package) {
 
 	// Calculate the time elapsed between the previous measurement and the current one, in seconds.
 	double deltaT = (meas_package.timeStamp - previousTimeStamp) / 1000000.0; // seconds
-	cout << "Delta-t= "<< deltaT << endl;
+	cout << "Delta-t= " << deltaT << endl;
 
 	// Prediction
 
@@ -156,11 +156,10 @@ void UKF::processMeasurement(MeasurementPackage meas_package) {
 	// Update
 
 	auto predictedMeasurements = predictRadarMeasurments(XsigPred);
-	VectorXd zPred { get<0>(predictedMeasurements)  };
-	MatrixXd Zsig { get<1>(predictedMeasurements)  };
-	MatrixXd S { get<2>(predictedMeasurements)  };
-	updateStateWithRadarMeasurements(meas_package, zPred, Zsig, S, XsigPred);
-
+	VectorXd zPred { get<0>(predictedMeasurements) };
+	MatrixXd Zsig { get<1>(predictedMeasurements) };
+	MatrixXd S { get<2>(predictedMeasurements) };
+	updateStateWithMeasurements(meas_package, zPred, Zsig, S, XsigPred);
 
 	// Set previousTimeStamp for the next iteration
 	previousTimeStamp = meas_package.timeStamp;
@@ -184,7 +183,7 @@ MatrixXd UKF::computeSigmaPoints() {
 
 	MatrixXd Xsig { MatrixXd(x_n, 2 * x_n + 1) };
 
-	auto lambda = 3- x_n;
+	auto lambda = 3 - x_n;
 
 	auto spread { sqrt(lambda + x_n) };
 	Xsig.col(0) = x;
@@ -267,7 +266,8 @@ MatrixXd UKF::predictSigmaPoints(const MatrixXd & XsigAug, double deltaT) {
 
 }
 
-pair<MatrixXd, MatrixXd> UKF::predictStateAndCovariance(const MatrixXd & XsigPred) {
+pair<MatrixXd, MatrixXd> UKF::predictStateAndCovariance(
+		const MatrixXd & XsigPred) {
 	/*
 	 * Predict expected state and covariance, and determine weights, based on predicted sigma points
 	 */
@@ -278,7 +278,6 @@ pair<MatrixXd, MatrixXd> UKF::predictStateAndCovariance(const MatrixXd & XsigPre
 	weights.setZero();
 	weights(0) = lambda / (lambda + xAug_n);  // Set the first component
 	weights.bottomRows(2 * xAug_n).setConstant(1 / (2 * (lambda + xAug_n))); // Set the remaining 2*n_aug components
-
 
 	// Predict state expected value
 	x.setZero();
@@ -300,8 +299,8 @@ pair<MatrixXd, MatrixXd> UKF::predictStateAndCovariance(const MatrixXd & XsigPre
 
 }
 
-tuple<VectorXd, MatrixXd, MatrixXd> UKF::predictRadarMeasurments(const MatrixXd & XsigPred) {
-	int z_n = 3; // Number of components in radar measurments
+pair<VectorXd, MatrixXd> UKF::predictMeasurements(const MatrixXd & Zsig,
+		const MatrixXd & R) {
 
 	//define spreading parameter
 	double lambda = 3 - xAug_n;  // TODO same as in predictSateAndCovariance()
@@ -310,6 +309,33 @@ tuple<VectorXd, MatrixXd, MatrixXd> UKF::predictRadarMeasurments(const MatrixXd 
 	weights.setZero();
 	weights(0) = lambda / (lambda + xAug_n);  // Set the first component
 	weights.bottomRows(2 * xAug_n).setConstant(1 / (2 * (lambda + xAug_n))); // Set the remaining 2*n_aug components
+
+	auto z_n = Zsig.rows();
+	// Predict measurement, expected value
+	VectorXd zPred = VectorXd(z_n);
+	zPred.setZero();
+	for (auto i = 0; i < 2 * xAug_n + 1; ++i)
+		zPred += weights(i) * Zsig.col(i);
+
+	// Predicted measurement covariance
+	auto S = MatrixXd(z_n, z_n);
+	S.setZero();
+	for (auto i = 0; i < 2 * xAug_n + 1; ++i) {
+		VectorXd zDiff = Zsig.col(i) - zPred;
+		zDiff(1) = normaliseAngle(zDiff(1));
+		S += weights(i) * (zDiff * zDiff.transpose());
+	}
+
+	S += R;
+
+	//cout << "S="<< endl << S << endl;
+	return make_pair(zPred, S);
+
+}
+
+tuple<VectorXd, MatrixXd, MatrixXd> UKF::predictRadarMeasurments(
+		const MatrixXd & XsigPred) {
+	int z_n = 3; // Number of components in radar measurments
 
 	// Sigma points in measurement space
 	MatrixXd Zsig = MatrixXd(z_n, 2 * xAug_n + 1);
@@ -327,32 +353,49 @@ tuple<VectorXd, MatrixXd, MatrixXd> UKF::predictRadarMeasurments(const MatrixXd 
 		Zsig.col(i) << rho, phi, rhoDot;
 	}
 
-	// Predict measurement, expected value
-	VectorXd zPred = VectorXd(z_n);
-	zPred.setZero();
-	for (auto i = 0; i < 2 * xAug_n + 1; ++i)
-		zPred += weights(i) * Zsig.col(i);
-
-	// Predicted measurement covariance
-	auto S = MatrixXd(z_n, z_n);
-	S.setZero();
-	for (auto i = 0; i < 2 * xAug_n + 1; ++i) {
-		VectorXd zDiff = Zsig.col(i) - zPred;
-		zDiff(1) = normaliseAngle(zDiff(1));
-		S += weights(i) * (zDiff * zDiff.transpose());
-	}
-
 	// Radar noise covariance TODO move it to init()
 	auto R = MatrixXd(3, 3);
 	R << std_radr * std_radr, 0, 0, 0, std_radphi * std_radphi, 0, 0, 0, std_radrd
 			* std_radrd;
-	S += R;
 
-	//cout << "S="<< endl << S << endl;
+	auto predicted = predictMeasurements(Zsig, R);
+	auto zPred = predicted.first;
+	auto S = predicted.second;
+
 	return make_tuple(zPred, Zsig, S);
 }
 
-pair<VectorXd, MatrixXd> UKF::updateStateWithRadarMeasurements(const MeasurementPackage & meas_package, const VectorXd & zPred, const MatrixXd & Zsig, const MatrixXd & S, const MatrixXd & XsigPred){
+
+tuple<VectorXd, MatrixXd, MatrixXd> UKF::predictLidarMeasurments(
+		const MatrixXd & XsigPred) {
+	int z_n = 2; // Number of components in lidar measurments
+
+	// Sigma points in measurement space
+	MatrixXd Zsig = MatrixXd(z_n, 2 * xAug_n + 1);
+
+	// Transform sigma points into measurement space, implementing the measurement model
+	Zsig.setZero();
+	for (auto i = 0; i < 2 * xAug_n + 1; ++i) {
+		auto px = XsigPred(0, i);
+		auto py = XsigPred(1, i);
+		Zsig.col(i) << px, py;
+	}
+
+	// Radar noise covariance TODO move it to init()
+	auto R = MatrixXd(2, 2);
+	R << std_laspx * std_laspx, 0, 0, std_laspy * std_laspy;
+
+	auto predicted = predictMeasurements(Zsig, R);
+	auto zPred = predicted.first;
+	auto S = predicted.second;
+
+	return make_tuple(zPred, Zsig, S);
+}
+
+
+pair<VectorXd, MatrixXd> UKF::updateStateWithMeasurements(
+		const MeasurementPackage & meas_package, const VectorXd & zPred,
+		const MatrixXd & Zsig, const MatrixXd & S, const MatrixXd & XsigPred) {
 	//create matrix for cross correlation Tc
 	VectorXd z { meas_package.rawMeasurement };
 	auto z_n = z.size();
@@ -371,7 +414,8 @@ pair<VectorXd, MatrixXd> UKF::updateStateWithRadarMeasurements(const Measurement
 		VectorXd x_diff = XsigPred.col(i) - x;
 		x_diff(3) = normaliseAngle(x_diff(3));
 		VectorXd z_diff = Zsig.col(i) - zPred;
-		z_diff(1) = normaliseAngle(z_diff(1));
+		if (z_diff.size()==3)  // If z_dif has 3 dimensions then it comes from radar, and angle theta needs to be normalised
+			z_diff(1) = normaliseAngle(z_diff(1));
 		Tc += weights(i) * x_diff * z_diff.transpose();
 	}
 
@@ -379,7 +423,6 @@ pair<VectorXd, MatrixXd> UKF::updateStateWithRadarMeasurements(const Measurement
 	MatrixXd K { Tc * S.inverse() };
 
 	//update state mean and covariance matrix
-
 
 	VectorXd z_diff = z - zPred;
 	z_diff(1) = normaliseAngle(z_diff(1));
@@ -431,16 +474,12 @@ void UKF::test() {
 	compareWith << 5.7441, 5.85768, 5.7441, 5.7441, 5.7441, 5.7441, 5.7441, 5.7441, 5.63052, 5.7441, 5.7441, 5.7441, 5.7441, 5.7441, 5.7441, 1.38, 1.34566, 1.52806, 1.38, 1.38, 1.38, 1.38, 1.38, 1.41434, 1.23194, 1.38, 1.38, 1.38, 1.38, 1.38, 2.2049, 2.28414, 2.24557, 2.29582, 2.2049, 2.2049, 2.2049, 2.2049, 2.12566, 2.16423, 2.11398, 2.2049, 2.2049, 2.2049, 2.2049, 0.5015, 0.44339, 0.631886, 0.516923, 0.595227, 0.5015, 0.5015, 0.5015, 0.55961, 0.371114, 0.486077, 0.407773, 0.5015, 0.5015, 0.5015, 0.3528, 0.299973, 0.462123, 0.376339, 0.48417, 0.418721, 0.3528, 0.3528, 0.405627, 0.243477, 0.329261, 0.22143, 0.286879, 0.3528, 0.3528, 0, 0, 0, 0, 0, 0, 0.34641, 0, 0, 0, 0, 0, 0, -0.34641, 0, 0, 0, 0, 0, 0, 0, 0, 0.34641, 0, 0, 0, 0, 0, 0, -0.34641;
 	assert(XsigAug.isApprox(compareWith, tolerance));
 
-	double deltaT {.1};
+	double deltaT { .1 };
 
 	MatrixXd XsigPred = predictSigmaPoints(XsigAug, deltaT);
 	// cout << "XsigPred=" << endl << XsigPred << endl;
-	compareWith = MatrixXd(5,15);
-	compareWith << 5.93553,6.06251,5.92217,5.9415,5.92361,5.93516,5.93705,5.93553,5.80832,5.94481,5.92935,5.94553,5.93589,5.93401,5.93553,
-			1.48939,1.44673,1.66484,1.49719,1.508,1.49001,1.49022,1.48939,1.5308,1.31287,1.48182,1.46967,1.48876,1.48855,1.48939,
-			2.2049,2.28414,2.24557,2.29582,2.2049,2.2049,2.23954,2.2049,2.12566,2.16423,2.11398,2.2049,2.2049,2.17026,2.2049,
-			0.53678,0.473387,0.678098,0.554557,0.643644,0.543372,0.53678,0.538512,0.600173,0.395462,0.519003,0.429916,0.530188,0.53678,0.535048,
-			0.3528,0.299973,0.462123,0.376339,0.48417,0.418721,0.3528,0.387441,0.405627,0.243477,0.329261,0.22143,0.286879,0.3528,0.318159;
+	compareWith = MatrixXd(5, 15);
+	compareWith << 5.93553, 6.06251, 5.92217, 5.9415, 5.92361, 5.93516, 5.93705, 5.93553, 5.80832, 5.94481, 5.92935, 5.94553, 5.93589, 5.93401, 5.93553, 1.48939, 1.44673, 1.66484, 1.49719, 1.508, 1.49001, 1.49022, 1.48939, 1.5308, 1.31287, 1.48182, 1.46967, 1.48876, 1.48855, 1.48939, 2.2049, 2.28414, 2.24557, 2.29582, 2.2049, 2.2049, 2.23954, 2.2049, 2.12566, 2.16423, 2.11398, 2.2049, 2.2049, 2.17026, 2.2049, 0.53678, 0.473387, 0.678098, 0.554557, 0.643644, 0.543372, 0.53678, 0.538512, 0.600173, 0.395462, 0.519003, 0.429916, 0.530188, 0.53678, 0.535048, 0.3528, 0.299973, 0.462123, 0.376339, 0.48417, 0.418721, 0.3528, 0.387441, 0.405627, 0.243477, 0.329261, 0.22143, 0.286879, 0.3528, 0.318159;
 	assert(XsigPred.isApprox(compareWith, tolerance));
 
 	auto stateAndCovariance = predictStateAndCovariance(XsigPred);
@@ -449,69 +488,50 @@ void UKF::test() {
 	compareWithV << 5.93446, 1.48886, 2.2049, 0.53678, 0.3528;
 	assert(stateAndCovariance.first.isApprox(compareWithV, tolerance));
 	// cout << "P=" << endl << P << endl;
-	compareWith = MatrixXd(5,5);
-	compareWith <<  0.00548035,   -0.002499,  0.00340508, -0.00357408,  -0.0030908,
-			  -0.002499,   0.0110543,  0.00151778,  0.00990746,  0.00806631,
-			 0.00340508,  0.00151778,      0.0058,     0.00078,      0.0008,
-			-0.00357408,  0.00990746,     0.00078,    0.011924,     0.01125,
-			 -0.0030908,  0.00806631,      0.0008,     0.01125,      0.0127;
+	compareWith = MatrixXd(5, 5);
+	compareWith << 0.00548035, -0.002499, 0.00340508, -0.00357408, -0.0030908, -0.002499, 0.0110543, 0.00151778, 0.00990746, 0.00806631, 0.00340508, 0.00151778, 0.0058, 0.00078, 0.0008, -0.00357408, 0.00990746, 0.00078, 0.011924, 0.01125, -0.0030908, 0.00806631, 0.0008, 0.01125, 0.0127;
 	assert(stateAndCovariance.second.isApprox(compareWith, tolerance));
 
 	auto predictedMeasurements = predictRadarMeasurments(XsigPred);
-	VectorXd zPred { get<0>(predictedMeasurements)  };
-	MatrixXd Zsig { get<1>(predictedMeasurements)  };
-	MatrixXd S { get<2>(predictedMeasurements)  };
+	VectorXd zPred { get<0>(predictedMeasurements) };
+	MatrixXd Zsig { get<1>(predictedMeasurements) };
+	MatrixXd S { get<2>(predictedMeasurements) };
 	// cout << "zPred=" << endl << zPred << endl;
 	compareWithV = VectorXd(3);
-	compareWithV <<  6.11934, 0.245834, 2.10274;
+	compareWithV << 6.11934, 0.245834, 2.10274;
 	assert(zPred.isApprox(compareWithV, tolerance));
 
 	// cout << "Zsig=" << endl << Zsig << endl;
-	compareWith = MatrixXd(3,15);
-	compareWith <<
-			 6.11954,  6.23274,  6.15173,  6.12724,  6.11254,  6.11934,  6.12122,  6.11954,  6.00666,  6.08806,  6.11171,  6.12448,  6.11974,  6.11787,  6.11954,
-			0.245851, 0.234255, 0.274046, 0.246849, 0.249279, 0.245965, 0.245923, 0.245851, 0.257693, 0.217355, 0.244896, 0.242332, 0.245737,  0.24578, 0.245851,
-			 2.11225,  2.21914,  2.06474,  2.18799,  2.03565,   2.1081,  2.14548,  2.11115,  2.00221,     2.13,  2.03506,  2.16622,   2.1163,  2.07902,  2.11334;
+	compareWith = MatrixXd(3, 15);
+	compareWith << 6.11954, 6.23274, 6.15173, 6.12724, 6.11254, 6.11934, 6.12122, 6.11954, 6.00666, 6.08806, 6.11171, 6.12448, 6.11974, 6.11787, 6.11954, 0.245851, 0.234255, 0.274046, 0.246849, 0.249279, 0.245965, 0.245923, 0.245851, 0.257693, 0.217355, 0.244896, 0.242332, 0.245737, 0.24578, 0.245851, 2.11225, 2.21914, 2.06474, 2.18799, 2.03565, 2.1081, 2.14548, 2.11115, 2.00221, 2.13, 2.03506, 2.16622, 2.1163, 2.07902, 2.11334;
 	assert(Zsig.isApprox(compareWith, tolerance));
 	/*
 	 * S=
-	   0.0946302, -0.000145123,   0.00408742,
-	-0.000145123,  0.000624209, -0.000781362,
-	  0.00408742, -0.000781362,    0.0180473;
-	  */
-
+	 0.0946302, -0.000145123,   0.00408742,
+	 -0.000145123,  0.000624209, -0.000781362,
+	 0.00408742, -0.000781362,    0.0180473;
+	 */
 
 	MeasurementPackage meas_package;
-	meas_package.rawMeasurement=VectorXd(3);
-	meas_package.rawMeasurement <<  5.9214,
-		      0.2187,
-		      2.0062;
-	meas_package.sensorType=MeasurementPackage::RADAR;
+	meas_package.rawMeasurement = VectorXd(3);
+	meas_package.rawMeasurement << 5.9214, 0.2187, 2.0062;
+	meas_package.sensorType = MeasurementPackage::RADAR;
 	meas_package.timeStamp = 1477010443100000;
 
-
 	/*auto S { MatrixXd(3, 3) };
-	S << 0.0946302, -0.000145123,   0.00408742,
-	-0.000145123,  0.000624209, -0.000781362,
-	  0.00408742, -0.000781362,    0.0180473;*/
-	auto updatedState = updateStateWithRadarMeasurements(meas_package, zPred, Zsig, S, XsigPred);
+	 S << 0.0946302, -0.000145123,   0.00408742,
+	 -0.000145123,  0.000624209, -0.000781362,
+	 0.00408742, -0.000781362,    0.0180473;*/
+	auto updatedState = updateStateWithMeasurements(meas_package, zPred,
+			Zsig, S, XsigPred);
 	// cout << "x=" << endl << updatedState.first << endl;
 	compareWithV = VectorXd(5);
-	compareWithV <<  5.92115,
-			1.41666,
-			2.15551,
-			0.48931,
-			0.31995;
+	compareWithV << 5.92115, 1.41666, 2.15551, 0.48931, 0.31995;
 	assert(updatedState.first.isApprox(compareWithV, tolerance));
 
 	// cout << "P=" << endl << updatedState.second << endl;
-	compareWith = MatrixXd(5,5);
-	compareWith <<
-			  0.00362505, -0.000375919,   0.00207001, -0.000983428, -0.000769897,
-			-0.000375919,    0.0054474,   0.00158839,   0.00454767,   0.00361869,
-			  0.00207001,   0.00158839,   0.00409776,   0.00158566,   0.00170133,
-			-0.000983428,   0.00454767,   0.00158566,   0.00647923,   0.00662974,
-			-0.000769897,   0.00361869,   0.00170133,   0.00662974,    0.0087481;
+	compareWith = MatrixXd(5, 5);
+	compareWith << 0.00362505, -0.000375919, 0.00207001, -0.000983428, -0.000769897, -0.000375919, 0.0054474, 0.00158839, 0.00454767, 0.00361869, 0.00207001, 0.00158839, 0.00409776, 0.00158566, 0.00170133, -0.000983428, 0.00454767, 0.00158566, 0.00647923, 0.00662974, -0.000769897, 0.00361869, 0.00170133, 0.00662974, 0.0087481;
 	assert(updatedState.second.isApprox(compareWith, tolerance));
 
 	cout << "Unit test passed!" << endl;

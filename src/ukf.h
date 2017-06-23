@@ -85,9 +85,13 @@ class UKF {
 
 	pair<MatrixXd, MatrixXd> predictStateAndCovariance(const MatrixXd & XsigPred);
 
+	pair<VectorXd, MatrixXd>  predictMeasurements(const MatrixXd & Zsig, const MatrixXd & R);
+
 	tuple<VectorXd, MatrixXd, MatrixXd>  predictRadarMeasurments(const MatrixXd & XsigPred);
 
-	pair<VectorXd, MatrixXd> updateStateWithRadarMeasurements(const MeasurementPackage & meas_package, const VectorXd & zPred, const MatrixXd & Zsig, const MatrixXd & S, const MatrixXd & XsigPred);
+	tuple<VectorXd, MatrixXd, MatrixXd>  predictLidarMeasurments(const MatrixXd & XsigPred);
+
+	pair<VectorXd, MatrixXd> updateStateWithMeasurements(const MeasurementPackage & meas_package, const VectorXd & zPred, const MatrixXd & Zsig, const MatrixXd & S, const MatrixXd & XsigPred);
 
 public:
 	/**
