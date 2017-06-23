@@ -452,7 +452,7 @@ struct assign_impl<Derived1, Derived2, SliceVectorizedTraversal, NoUnrolling, Ve
     if((!bool(dstIsAligned)) && (size_t(dst_ptr) % sizeof(Scalar))>0)
     {
       // the pointer is not aligend-on scalar, so alignment is not possible
-      return assign_impl<Derived1,Derived2,DefaultTraversal,NoUnrolling>::run(dst, src);
+      return assign_impl<Derived1,Derived2,DefaultTraversal,NoUnrolling>::run(dst, src); // @suppress("Unused return value")
     }
     const Index packetAlignedMask = packetSize - 1;
     const Index innerSize = dst.innerSize();

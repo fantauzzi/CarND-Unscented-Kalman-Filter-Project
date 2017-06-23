@@ -86,8 +86,8 @@ void UKF::init(MeasurementPackage meas_package) {
 
 	// Initialise current state covariance
 	P.setIdentity();
-	P *= 100.;
-	P.topLeftCorner(2, 2).setIdentity();
+	//P *= 100.;
+	//P.topLeftCorner(2, 2).setIdentity();
 
 	// Initialize the number of state components, and augmented state components
 
@@ -141,7 +141,7 @@ void UKF::processMeasurement(MeasurementPackage meas_package) {
 
 	// Calculate the time elapsed between the previous measurement and the current one, in seconds.
 	double deltaT = (meas_package.timeStamp - previousTimeStamp) / 1000000.0; // seconds
-	cout << "Delta-t="<< endl << deltaT << endl;
+	cout << "Delta-t= "<< deltaT << endl;
 
 	// Prediction
 
