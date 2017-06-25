@@ -37,6 +37,8 @@ class UKF {
 
 	VectorXd weights;
 
+	double nis;
+
 	long long previousTimeStamp;
 
 	///* Process noise standard deviation longitudinal acceleration in m/s^2
@@ -104,6 +106,8 @@ public:
 	void test();
 
 	VectorXd getState() const;
+
+	double getNIS() const;
 
 	/**
 	 * ProcessMeasurement

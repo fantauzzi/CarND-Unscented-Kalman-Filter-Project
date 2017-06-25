@@ -44,9 +44,12 @@ int main() {
 	vector<VectorXd> estimations;
 	vector<VectorXd> ground_truth;
 
+	ofstream outputFile;
+	outputFile.open("out.txt");
+
 	unsigned iteration {0};
 	h.onMessage(
-			[&iteration, &ukf,&tools,&estimations,&ground_truth](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length, uWS::OpCode opCode) {
+			[&outputFile, &iteration, &ukf,&tools,&estimations,&ground_truth](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length, uWS::OpCode opCode) {
 				// "42" at the start of the message means there's a websocket message event.
 				// The 4 signifies a websocket message
 				// The 2 signifies a websocket event
@@ -127,6 +130,11 @@ int main() {
 							double p_y = state(1);
 							double v = state(2);
 							double yaw = state(3);
+							double yawRate = state(4);
+							double nis = ukf.getNIS();
+
+							outputFile << p_x << '\t' << p_y << '\t' << v << '\t' << yaw << '\t' << yawRate << '\t' << nis << endl;
+							outputFile.flush();
 
 							double v1 = cos(yaw)*v;
 							double v2 = sin(yaw)*v;

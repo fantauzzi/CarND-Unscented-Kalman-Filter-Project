@@ -17,7 +17,7 @@ using std::get;
  * Initializes Unscented Kalman filter
  */
 UKF::UKF() :
-		isInitialised { false }, previousTimeStamp { 0 }, x_n { 0 }, xAug_n { 0 } {
+		isInitialised { false }, previousTimeStamp { 0 }, x_n { 0 }, xAug_n { 0 }, nis{0} {
 	// if this is false, laser measurements will be ignored (except during init)
 	useLaser = true;
 
@@ -122,6 +122,10 @@ VectorXd UKF::getState() const {
 	return x;
 }
 
+double UKF::getNIS() const {
+	return nis;
+}
+
 /**
  * @param {MeasurementPackage} meas_package The latest measurement data of
  * either radar or laser.
@@ -170,7 +174,7 @@ void UKF::processMeasurement(MeasurementPackage meas_package) {
 	MatrixXd Zsig { get<1>(predictedMeasurements) };
 	MatrixXd S { get<2>(predictedMeasurements) };
 	auto res = updateStateWithMeasurements(meas_package, zPred, Zsig, S, XsigPred);
-	auto nis = get<2>(res);
+	nis = get<2>(res);
 	cout << "nis= " << nis << endl;
 	// Set previousTimeStamp for the next iteration
 	previousTimeStamp = meas_package.timeStamp;
