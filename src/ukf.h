@@ -35,10 +35,7 @@ class UKF {
 	///* state covariance matrix
 	MatrixXd P;
 
-	// MatrixXd S;
-
-	///* predicted sigma points matrix
-	//MatrixXd XsigPred;
+	VectorXd weights;
 
 	long long previousTimeStamp;
 
@@ -91,7 +88,7 @@ class UKF {
 
 	tuple<VectorXd, MatrixXd, MatrixXd>  predictLidarMeasurments(const MatrixXd & XsigPred);
 
-	pair<VectorXd, MatrixXd> updateStateWithMeasurements(const MeasurementPackage & meas_package, const VectorXd & zPred, const MatrixXd & Zsig, const MatrixXd & S, const MatrixXd & XsigPred);
+	tuple<VectorXd, MatrixXd, double> updateStateWithMeasurements(const MeasurementPackage & meas_package, const VectorXd & zPred, const MatrixXd & Zsig, const MatrixXd & S, const MatrixXd & XsigPred);
 
 public:
 	/**

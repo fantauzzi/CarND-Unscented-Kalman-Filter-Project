@@ -106,6 +106,14 @@ void UKF::init(MeasurementPackage meas_package) {
 	//radar measurement noise standard deviation radius change in m/s
 	std_radrd = 0.1;
 
+	auto lambda = 3. - xAug_n;
+
+	weights = VectorXd(2 * xAug_n + 1);
+	weights.setZero();
+	weights(0) = lambda / (lambda + xAug_n);  // Set the first component
+	weights.bottomRows(2 * xAug_n).setConstant(1 / (2 * (lambda + xAug_n))); // Set the remaining 2*n_aug components
+
+
 	// Chop chop, job done!
 	isInitialised = true;
 }
@@ -146,12 +154,12 @@ void UKF::processMeasurement(MeasurementPackage meas_package) {
 	// Prediction
 
 	MatrixXd XsigAug = computeAugmentedSigmaPoints();
-	cout << "XsigAug=" << endl << XsigAug << endl;
+	// cout << "XsigAug=" << endl << XsigAug << endl;
 	MatrixXd XsigPred = predictSigmaPoints(XsigAug, deltaT);
-	cout << "XsigPred=" << endl << XsigPred << endl;
+	// cout << "XsigPred=" << endl << XsigPred << endl;
 	predictStateAndCovariance(XsigPred);
-	cout << "x=" << endl << x << endl;
-	cout << "P=" << endl << P << endl;
+	// cout << "x=" << endl << x << endl;
+	// cout << "P=" << endl << P << endl;
 
 	// Update
 
@@ -161,8 +169,9 @@ void UKF::processMeasurement(MeasurementPackage meas_package) {
 	VectorXd zPred { get<0>(predictedMeasurements) };
 	MatrixXd Zsig { get<1>(predictedMeasurements) };
 	MatrixXd S { get<2>(predictedMeasurements) };
-	updateStateWithMeasurements(meas_package, zPred, Zsig, S, XsigPred);
-
+	auto res = updateStateWithMeasurements(meas_package, zPred, Zsig, S, XsigPred);
+	auto nis = get<2>(res);
+	cout << "nis= " << nis << endl;
 	// Set previousTimeStamp for the next iteration
 	previousTimeStamp = meas_package.timeStamp;
 }
@@ -271,16 +280,8 @@ MatrixXd UKF::predictSigmaPoints(const MatrixXd & XsigAug, double deltaT) {
 pair<MatrixXd, MatrixXd> UKF::predictStateAndCovariance(
 		const MatrixXd & XsigPred) {
 	/*
-	 * Predict expected state and covariance, and determine weights, based on predicted sigma points
+	 * Predict expected state and covariance based on predicted sigma points
 	 */
-
-	auto lambda = 3. - xAug_n;
-
-	auto weights = VectorXd(2 * xAug_n + 1);
-	weights.setZero();
-	weights(0) = lambda / (lambda + xAug_n);  // Set the first component
-	weights.bottomRows(2 * xAug_n).setConstant(1 / (2 * (lambda + xAug_n))); // Set the remaining 2*n_aug components
-
 	// Predict state expected value
 	x.setZero();
 	for (auto i = 0; i < 2 * xAug_n + 1; ++i)
@@ -303,14 +304,6 @@ pair<MatrixXd, MatrixXd> UKF::predictStateAndCovariance(
 
 pair<VectorXd, MatrixXd> UKF::predictMeasurements(const MatrixXd & Zsig,
 		const MatrixXd & R) {
-
-	//define spreading parameter
-	double lambda = 3 - xAug_n;  // TODO same as in predictSateAndCovariance()
-
-	auto weights = VectorXd(2 * xAug_n + 1);
-	weights.setZero();
-	weights(0) = lambda / (lambda + xAug_n);  // Set the first component
-	weights.bottomRows(2 * xAug_n).setConstant(1 / (2 * (lambda + xAug_n))); // Set the remaining 2*n_aug components
 
 	auto z_n = Zsig.rows();
 	// Predict measurement, expected value
@@ -395,20 +388,13 @@ tuple<VectorXd, MatrixXd, MatrixXd> UKF::predictLidarMeasurments(
 }
 
 
-pair<VectorXd, MatrixXd> UKF::updateStateWithMeasurements(
+tuple<VectorXd, MatrixXd, double> UKF::updateStateWithMeasurements(
 		const MeasurementPackage & meas_package, const VectorXd & zPred,
 		const MatrixXd & Zsig, const MatrixXd & S, const MatrixXd & XsigPred) {
 	//create matrix for cross correlation Tc
 	VectorXd z { meas_package.rawMeasurement };
 	auto z_n = z.size();
 	MatrixXd Tc = MatrixXd(x_n, z_n);
-
-	auto lambda = 3. - xAug_n;  // TODO fix code duplication
-
-	auto weights = VectorXd(2 * xAug_n + 1);
-	weights.setZero();
-	weights(0) = lambda / (lambda + xAug_n);  // Set the first component
-	weights.bottomRows(2 * xAug_n).setConstant(1 / (2 * (lambda + xAug_n))); // Set the remaining 2*n_aug components
 
 	//calculate cross correlation matrix
 	Tc.setZero();
@@ -431,7 +417,10 @@ pair<VectorXd, MatrixXd> UKF::updateStateWithMeasurements(
 	x += K * z_diff;
 	P -= K * S * K.transpose();
 
-	return make_pair(x, P);
+	double nis=z_diff.transpose()*S.inverse()*z_diff;
+
+
+	return make_tuple(x, P, nis);
 
 }
 void UKF::test() {
@@ -529,12 +518,12 @@ void UKF::test() {
 	// cout << "x=" << endl << updatedState.first << endl;
 	compareWithV = VectorXd(5);
 	compareWithV << 5.92115, 1.41666, 2.15551, 0.48931, 0.31995;
-	assert(updatedState.first.isApprox(compareWithV, tolerance));
+	assert(get<0>(updatedState).isApprox(compareWithV, tolerance));
 
 	// cout << "P=" << endl << updatedState.second << endl;
 	compareWith = MatrixXd(5, 5);
 	compareWith << 0.00362505, -0.000375919, 0.00207001, -0.000983428, -0.000769897, -0.000375919, 0.0054474, 0.00158839, 0.00454767, 0.00361869, 0.00207001, 0.00158839, 0.00409776, 0.00158566, 0.00170133, -0.000983428, 0.00454767, 0.00158566, 0.00647923, 0.00662974, -0.000769897, 0.00361869, 0.00170133, 0.00662974, 0.0087481;
-	assert(updatedState.second.isApprox(compareWith, tolerance));
+	assert(get<1>(updatedState).isApprox(compareWith, tolerance));
 
 	cout << "Unit test passed!" << endl;
 }
