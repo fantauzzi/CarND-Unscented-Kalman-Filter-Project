@@ -9,6 +9,14 @@ def plot_NIS(x, y, threshold, title):
     line1, = ax.plot(x, y)
     constant=[threshold]*len(x)  # LIDAR would be 9.488
     line2, = ax.plot(x, constant)
+    ax.grid(True, which='both')
+    plt.title(title)
+
+def plot_error(y, title):
+    x= range(1,len(y)+1)
+    fig, ax = plt.subplots()
+    line1, = ax.plot(x, y)
+    ax.grid(True, which='both')
     plt.title(title)
 
 
@@ -26,39 +34,54 @@ if __name__ == '__main__':
     for line in lines:
         labels = radar_columns if line[0]=='R' else lidar_columns
         line = line[:len(line)-1]
-        data = {key: value for key, value in zip(radar_columns, line.split('\t'))}
+        data = {key: value for key, value in zip(labels, line.split('\t'))}
         gt_entries.append(data)
 
-    measures_fname='../data/out.txt'
+    kf_fname= '../data/out.txt'
 
-    with open(measures_fname) as input_file:
+    with open(kf_fname) as input_file:
         lines=input_file.readlines()
 
-    print('Read', len(lines), 'lines from input file', measures_fname)
+    print('Read', len(lines), 'lines from input file', kf_fname)
 
-    columns= ['x_measured', 'y_measured', 'v_measured', 'yaw_measured', 'yaw_rate_measured', 'nis']
+    columns= ['x_kf', 'y_kf', 'v_kf', 'yaw_kf', 'yaw_rate_kf', 'nis']
 
-    meas_entries=[]
+    kf_entries=[]
 
     for line in lines:
         line = line[:len(line)-1]
         data = {key: value for key, value in zip(columns, line.split('\t'))}
-        meas_entries.append(data)
+        kf_entries.append(data)
 
     # Truncate the longest of the two lists to the length of the shortest
-    shortest_len=min(len(gt_entries), len(meas_entries))
+    shortest_len=min(len(gt_entries), len(kf_entries))
     gt_entries = gt_entries[:shortest_len]
-    meas_entries = meas_entries[:shortest_len]
+    kf_entries = kf_entries[:shortest_len]
 
     nis_radar, nis_lidar =[], []
     x_nis_radar, x_nis_lidar =[], []
+    xy_distances=[]
+    v_errors=[]
     count =1;
     count_above_radar_nis_threshold=0;
     count_above_lidar_nis_threshold = 0;
     radar_nis_threshold = 7.815
     lidar_nis_threshold = 9.488
-    for meas_entry, gt_entry in zip(meas_entries, gt_entries):
-        nis_value = float(meas_entry['nis'])
+    for kf_entry, gt_entry in zip(kf_entries, gt_entries):
+        x_gt= float(gt_entry['x_groundtruth'])
+        y_gt = float(gt_entry['y_groundtruth'])
+        x_kf = float(kf_entry['x_kf'])
+        y_kf = float(kf_entry['y_kf'])
+        vx_gt = float(gt_entry['vx_groundtruth'])
+        vy_gt = float(gt_entry['vy_groundtruth'])
+        v_kf = float(kf_entry['v_kf'])
+        x_kf = float(kf_entry['x_kf'])
+        xy_distance= ((x_gt - x_kf) ** 2 + (y_gt - y_kf) ** 2) ** .5
+        xy_distances.append(xy_distance)
+        v_gt=(vx_gt**2+vy_gt**2)**.5
+        v_error= v_gt-v_kf
+        v_errors.append(v_error)
+        nis_value = float(kf_entry['nis'])
         if gt_entry['sensor_type'] == 'R':
             nis_radar.append(nis_value)
             x_nis_radar.append(count)
@@ -79,4 +102,8 @@ if __name__ == '__main__':
 
     plot_NIS(x_nis_radar, nis_radar, 7.815, "NIS for RADAR")
     plot_NIS(x_nis_lidar, nis_lidar, 9.488, "NIS for LIDAR")
+    plot_error(xy_distances, "Position error")
+    plot_error(v_errors, "Tangential velocity error")
+
+
     plt.show()
