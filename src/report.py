@@ -21,7 +21,7 @@ def plot_error(y, title):
     plt.title(title)
 
 if __name__ == '__main__':
-    use_radar=False
+    use_radar=True
     use_lidar=True
     input_fname='../data/obj_pose-laser-radar-synthetic-input.txt'
     with open(input_fname) as input_file:
@@ -137,9 +137,9 @@ if __name__ == '__main__':
     print('Max yaw. accel. in absolute value=', max(yaw_a))
 
     if use_radar:
-        plot_NIS(x_nis_radar, nis_radar, 7.815, "NIS for RADAR")
+        plot_NIS(x_nis_radar, nis_radar, radar_nis_threshold, "NIS for RADAR")
     if use_lidar:
-        plot_NIS(x_nis_lidar, nis_lidar, 9.488, "NIS for LIDAR")
+        plot_NIS(x_nis_lidar, nis_lidar, lidar_nis_threshold, "NIS for LIDAR")
     plot_error(xy_distances, "Position error")
     plot_error(v_errors, "Tangential velocity error")
     plot_error(yaw_errors, "Yaw error")

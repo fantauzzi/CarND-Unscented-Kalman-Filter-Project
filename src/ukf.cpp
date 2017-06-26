@@ -23,7 +23,7 @@ UKF::UKF() :
 	useLaser = true;
 
 	// if this is false, radar measurements will be ignored (except during init)
-	useRadar = false;
+	useRadar = true;
 
 	// initial state vector
 	x = VectorXd(5);
@@ -96,8 +96,8 @@ void UKF::init(MeasurementPackage meas_package) {
 	x_n = x.size();
 	xAug_n = x_n + 2;
 
-	std_a = 0.1; //.2;
-	std_yawdd = 0.14; //.28;
+	std_a = 0.4;
+	std_yawdd = .56;
 	//radar measurement noise standard deviation radius in m
 	std_radr = 0.3;
 
