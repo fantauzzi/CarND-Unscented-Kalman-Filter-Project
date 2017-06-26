@@ -17,12 +17,13 @@ using std::get;
  * Initializes Unscented Kalman filter
  */
 UKF::UKF() :
-		isInitialised { false }, previousTimeStamp { 0 }, x_n { 0 }, xAug_n { 0 }, nis{0} {
+		isInitialised { false }, nis { 0 }, previousTimeStamp { 0 }, x_n { 0 }, xAug_n {
+				0 } {
 	// if this is false, laser measurements will be ignored (except during init)
 	useLaser = true;
 
 	// if this is false, radar measurements will be ignored (except during init)
-	useRadar = true;
+	useRadar = false;
 
 	// initial state vector
 	x = VectorXd(5);
@@ -68,35 +69,35 @@ void UKF::init(MeasurementPackage meas_package) {
 	if (meas_package.sensorType == MeasurementPackage::LIDAR) {
 		auto px = meas_package.rawMeasurement(0);
 		auto py = meas_package.rawMeasurement(1);
-		auto v = 1.;
+		auto v = 0.;
 		auto psi = 0.;
 		auto psiDot = 0.;
 		x << px, py, v, psi, psiDot;
 	} else {
 		auto rho = meas_package.rawMeasurement(0);
 		double theta = meas_package.rawMeasurement(1); // enforced to double to circumvent Eclipse CDT parser bug
-		auto rhoDot = meas_package.rawMeasurement(2);
+		// auto rhoDot = meas_package.rawMeasurement(2);
 		auto px = rho * cos(theta);
 		auto py = rho * sin(theta);
-		auto v = rhoDot;  // Incorrect, but OK for initialisation
-		auto psi = theta;  // Incorrect, but OK for initialisation
+		auto v = 0.;
+		auto psi = 0.;
 		auto psiDot = 0.;
 		x << px, py, v, psi, psiDot;
 	}
 
 	// Initialise current state covariance
 	P.setIdentity();
-	//P *= 100.;
-	//P.topLeftCorner(2, 2).setIdentity();
+	P(2, 2) = 10;
+	P(3, 3) = 10;
+	P(4, 4) = 10;
 
 	// Initialize the number of state components, and augmented state components
 
 	x_n = x.size();
 	xAug_n = x_n + 2;
 
-	std_a = 1.;
-	std_yawdd = 1.;
-
+	std_a = 0.1; //.2;
+	std_yawdd = 0.14; //.28;
 	//radar measurement noise standard deviation radius in m
 	std_radr = 0.3;
 
@@ -112,7 +113,6 @@ void UKF::init(MeasurementPackage meas_package) {
 	weights.setZero();
 	weights(0) = lambda / (lambda + xAug_n);  // Set the first component
 	weights.bottomRows(2 * xAug_n).setConstant(1 / (2 * (lambda + xAug_n))); // Set the remaining 2*n_aug components
-
 
 	// Chop chop, job done!
 	isInitialised = true;
@@ -136,9 +136,9 @@ void UKF::processMeasurement(MeasurementPackage meas_package) {
 		init(meas_package);
 		// Set previousTimeStamp for the next iteration
 		previousTimeStamp = meas_package.timeStamp;
-		cout << "x=" << endl << x << endl;
-		cout << "P=" << endl << P << endl;
-		return; // That's it! After initialisation, nothing more to do until another measurement is collected.
+		// cout << "x=" << endl << x << endl;
+		// cout << "P=" << endl << P << endl;
+		return;// That's it! After initialisation, nothing more to do until another measurement is collected.
 	}
 
 	/* If the measurement is from an instrument to be ignored, do nothing and just return.
@@ -153,7 +153,7 @@ void UKF::processMeasurement(MeasurementPackage meas_package) {
 
 	// Calculate the time elapsed between the previous measurement and the current one, in seconds.
 	double deltaT = (meas_package.timeStamp - previousTimeStamp) / 1000000.0; // seconds
-	cout << "Delta-t= " << deltaT << endl;
+	//cout << "Delta-t= " << deltaT << endl;
 
 	// Prediction
 
@@ -167,15 +167,17 @@ void UKF::processMeasurement(MeasurementPackage meas_package) {
 
 	// Update
 
-	auto predictedMeasurements = (meas_package.sensorType == MeasurementPackage::RADAR)?
-			predictRadarMeasurments(XsigPred):
-			predictLidarMeasurments(XsigPred);
+	auto predictedMeasurements =
+			(meas_package.sensorType == MeasurementPackage::RADAR) ?
+					predictRadarMeasurments(XsigPred) :
+					predictLidarMeasurments(XsigPred);
 	VectorXd zPred { get<0>(predictedMeasurements) };
 	MatrixXd Zsig { get<1>(predictedMeasurements) };
 	MatrixXd S { get<2>(predictedMeasurements) };
-	auto res = updateStateWithMeasurements(meas_package, zPred, Zsig, S, XsigPred);
+	auto res = updateStateWithMeasurements(meas_package, zPred, Zsig, S,
+			XsigPred);
 	nis = get<2>(res);
-	cout << "nis= " << nis << endl;
+	// cout << "nis= " << nis << endl;
 	// Set previousTimeStamp for the next iteration
 	previousTimeStamp = meas_package.timeStamp;
 }
@@ -290,6 +292,7 @@ pair<MatrixXd, MatrixXd> UKF::predictStateAndCovariance(
 	x.setZero();
 	for (auto i = 0; i < 2 * xAug_n + 1; ++i)
 		x += weights(i) * XsigPred.col(i);
+	x(3) = normaliseAngle(x(3));
 
 	// Covariance of the predicted state
 	P.setZero();
@@ -364,7 +367,6 @@ tuple<VectorXd, MatrixXd, MatrixXd> UKF::predictRadarMeasurments(
 	return make_tuple(zPred, Zsig, S);
 }
 
-
 tuple<VectorXd, MatrixXd, MatrixXd> UKF::predictLidarMeasurments(
 		const MatrixXd & XsigPred) {
 	int z_n = 2; // Number of components in lidar measurments
@@ -391,7 +393,6 @@ tuple<VectorXd, MatrixXd, MatrixXd> UKF::predictLidarMeasurments(
 	return make_tuple(zPred, Zsig, S);
 }
 
-
 tuple<VectorXd, MatrixXd, double> UKF::updateStateWithMeasurements(
 		const MeasurementPackage & meas_package, const VectorXd & zPred,
 		const MatrixXd & Zsig, const MatrixXd & S, const MatrixXd & XsigPred) {
@@ -406,7 +407,7 @@ tuple<VectorXd, MatrixXd, double> UKF::updateStateWithMeasurements(
 		VectorXd x_diff = XsigPred.col(i) - x;
 		x_diff(3) = normaliseAngle(x_diff(3));
 		VectorXd z_diff = Zsig.col(i) - zPred;
-		if (z_diff.size()==3)  // If z_dif has 3 dimensions then it comes from radar, and angle theta needs to be normalised
+		if (z_diff.size() == 3) // If z_dif has 3 dimensions then it comes from radar, and angle theta needs to be normalised
 			z_diff(1) = normaliseAngle(z_diff(1));
 		Tc += weights(i) * x_diff * z_diff.transpose();
 	}
@@ -417,12 +418,13 @@ tuple<VectorXd, MatrixXd, double> UKF::updateStateWithMeasurements(
 	//update state mean and covariance matrix
 
 	VectorXd z_diff = z - zPred;
-	z_diff(1) = normaliseAngle(z_diff(1));
+	if (z_diff.size() == 3) // If z_dif has 3 dimensions then it comes from radar, and angle theta needs to be normalised
+		z_diff(1) = normaliseAngle(z_diff(1));
 	x += K * z_diff;
+	x(3) = normaliseAngle(x(3));
 	P -= K * S * K.transpose();
 
-	double nis=z_diff.transpose()*S.inverse()*z_diff;
-
+	double nis = z_diff.transpose() * S.inverse() * z_diff;
 
 	return make_tuple(x, P, nis);
 
@@ -517,8 +519,8 @@ void UKF::test() {
 	 S << 0.0946302, -0.000145123,   0.00408742,
 	 -0.000145123,  0.000624209, -0.000781362,
 	 0.00408742, -0.000781362,    0.0180473;*/
-	auto updatedState = updateStateWithMeasurements(meas_package, zPred,
-			Zsig, S, XsigPred);
+	auto updatedState = updateStateWithMeasurements(meas_package, zPred, Zsig,
+			S, XsigPred);
 	// cout << "x=" << endl << updatedState.first << endl;
 	compareWithV = VectorXd(5);
 	compareWithV << 5.92115, 1.41666, 2.15551, 0.48931, 0.31995;

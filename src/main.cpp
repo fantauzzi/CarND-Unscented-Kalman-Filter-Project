@@ -45,7 +45,8 @@ int main() {
 	vector<VectorXd> ground_truth;
 
 	ofstream outputFile;
-	outputFile.open("out.txt");
+	outputFile.open("data/out.txt", ofstream::trunc);
+	assert(outputFile.is_open());
 
 	unsigned iteration {0};
 	h.onMessage(
@@ -117,7 +118,7 @@ int main() {
 							ground_truth.push_back(gt_values);
 
 							//Call ProcessMeasurment(meas_package) for Kalman filter
-							cout << "Iteration# " << iteration << endl;
+							// cout << "Iteration# " << iteration << endl;
 							ukf.processMeasurement(meas_package);
 							++ iteration;
 
@@ -133,7 +134,7 @@ int main() {
 							double yawRate = state(4);
 							double nis = ukf.getNIS();
 
-							outputFile << p_x << '\t' << p_y << '\t' << v << '\t' << yaw << '\t' << yawRate << '\t' << nis << endl;
+							outputFile << timestamp << '\t' << p_x << '\t' << p_y << '\t' << v << '\t' << yaw << '\t' << yawRate << '\t' << nis << endl;
 							outputFile.flush();
 
 							double v1 = cos(yaw)*v;
