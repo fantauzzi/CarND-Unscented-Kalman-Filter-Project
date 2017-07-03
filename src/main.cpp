@@ -32,8 +32,6 @@ void runUnitTest() {
 
 int main() {
 
-	runUnitTest();
-
 	uWS::Hub h;
 
 	// Create a Kalman Filter instance
@@ -147,7 +145,7 @@ int main() {
 
 							estimations.push_back(estimate);
 
-							VectorXd RMSE = tools.CalculateRMSE(estimations, ground_truth);
+							VectorXd RMSE = tools.calculateRMSE(estimations, ground_truth);
 
 							json msgJson;
 							msgJson["estimate_x"] = p_x;

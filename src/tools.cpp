@@ -11,7 +11,7 @@ Tools::Tools() {
 Tools::~Tools() {
 }
 
-VectorXd Tools::CalculateRMSE(const vector<VectorXd> &estimations, const vector<VectorXd> &groundTruth) {
+VectorXd Tools::calculateRMSE(const vector<VectorXd> &estimations, const vector<VectorXd> &groundTruth) {
 	VectorXd rmse(4);
 	rmse.setZero();
 	// Check the validity of the input parameters
