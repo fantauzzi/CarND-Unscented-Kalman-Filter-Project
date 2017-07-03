@@ -15,11 +15,11 @@ using std::cout;
 using std::endl;
 using std::make_pair;
 using std::make_tuple;
-/**
- * Initializes Unscented Kalman filter
- */
+
 UKF::UKF() :
 		isInitialised { false },
+		useLidar { true },
+		useRadar { true },
 		x { VectorXd(5) },
 		P { MatrixXd(5, 5) },
 		nis { 0 },
@@ -33,18 +33,17 @@ UKF::UKF() :
 		std_radrd {0.1},
 		x_n { static_cast<int>(x.size()) },
 		xAug_n {x_n+2} {
-	// if this is false, laser measurements will be ignored (except during init)
-	useLaser = true;
-
-	// if this is false, radar measurements will be ignored (except during init)
-	useRadar = true;
-
 	// Initialise weights, done here once and for all.
 	auto lambda = 3. - xAug_n;
 	weights = VectorXd(2 * xAug_n + 1);
 	weights.setZero();
 	weights(0) = lambda / (lambda + xAug_n);  // Set the first component
 	weights.bottomRows(2 * xAug_n).setConstant(1 / (2 * (lambda + xAug_n))); // Set the remaining 2*n_aug components
+}
+
+UKF::UKF(const bool useRadarInit, const bool useLidarInit): UKF() {
+	useRadar=useRadarInit;
+	useLidar=useLidarInit;
 }
 
 UKF::~UKF() {
@@ -84,6 +83,10 @@ VectorXd UKF::getState() const {
 	return x;
 }
 
+MatrixXd UKF::getCovariance() const {
+	return P;
+}
+
 double UKF::getNIS() const {
 	return nis;
 }
@@ -101,7 +104,7 @@ void UKF::processMeasurement(MeasurementPackage meas_package) {
 	 * Note: no update to previousTimeStamp at this time.
 	 */
 
-	if (!useLaser && meas_package.sensorType == MeasurementPackage::LIDAR)
+	if (!useLidar && meas_package.sensorType == MeasurementPackage::LIDAR)
 		return;
 
 	if (!useRadar && meas_package.sensorType == MeasurementPackage::RADAR)
@@ -147,11 +150,7 @@ void UKF::processMeasurement(MeasurementPackage meas_package) {
  * measurement and this one.
  */
 
-MatrixXd UKF::computeSigmaPoints() {
-	/*
-	 *Generate sigma points, given state dimension, lambda, current state and current covariance matrix
-	 */
-
+MatrixXd UKF::computeSigmaPoints() const {
 	// Get the square root of the covariance
 	MatrixXd A { P.llt().matrixL() };
 
@@ -171,7 +170,7 @@ MatrixXd UKF::computeSigmaPoints() {
 	return Xsig;
 }
 
-MatrixXd UKF::computeAugmentedSigmaPoints() {
+MatrixXd UKF::computeAugmentedSigmaPoints() const {
 	// The augmented state
 	VectorXd xAug = VectorXd(xAug_n);
 	xAug.setZero();
@@ -187,7 +186,7 @@ MatrixXd UKF::computeAugmentedSigmaPoints() {
 	P_Aug.block(0, 0, x_n, x_n) = P;
 	P_Aug.block(x_n, x_n, 2, 2) = Q;
 
-	// Get square root of augmented state covariance
+	// Get the square root of the augmented state covariance
 	MatrixXd A_Aug = P_Aug.llt().matrixL();
 
 	//Calculate augmented sigma points
@@ -203,7 +202,7 @@ MatrixXd UKF::computeAugmentedSigmaPoints() {
 	return XsigAug;
 }
 
-MatrixXd UKF::predictSigmaPoints(const MatrixXd & XsigAug, double deltaT) {
+MatrixXd UKF::predictSigmaPoints(const MatrixXd & XsigAug, double deltaT) const {
 	double epsilon = 0.000001;  // Threshold under which absolute value of psiDot is considered 0
 
 	//Make matrix with predicted sigma points as columns
@@ -230,10 +229,9 @@ MatrixXd UKF::predictSigmaPoints(const MatrixXd & XsigAug, double deltaT) {
 	}
 
 	return XsigPred;
-
 }
 
-pair<MatrixXd, MatrixXd> UKF::predictStateAndCovariance(
+pair<VectorXd, MatrixXd> UKF::predictStateAndCovariance(
 		const MatrixXd & XsigPred) {
 	// Determine the predicted state x based on augmented sigma-points and pre-computed weights
 	x.setZero();
@@ -257,7 +255,7 @@ pair<MatrixXd, MatrixXd> UKF::predictStateAndCovariance(
 }
 
 pair<VectorXd, MatrixXd> UKF::predictMeasurements(const MatrixXd & Zsig,
-		const MatrixXd & R) {
+		const MatrixXd & R) const {
 
 	// Determine the measurement expected value (predicted measurement) and store it in zPred
 	const auto z_n = Zsig.rows();
@@ -281,7 +279,7 @@ pair<VectorXd, MatrixXd> UKF::predictMeasurements(const MatrixXd & Zsig,
 }
 
 tuple<VectorXd, MatrixXd, MatrixXd> UKF::predictRadarMeasurments(
-		const MatrixXd & XsigPred) {
+		const MatrixXd & XsigPred) const {
 	const int z_n = 3; // Number of components in radar measurements
 
 	// Will store sigma points in measurement space
@@ -313,7 +311,7 @@ tuple<VectorXd, MatrixXd, MatrixXd> UKF::predictRadarMeasurments(
 }
 
 tuple<VectorXd, MatrixXd, MatrixXd> UKF::predictLidarMeasurments(
-		const MatrixXd & XsigPred) {
+		const MatrixXd & XsigPred) const {
 	const int z_n = 2; // Number of components in lidar measurments
 
 	// Will store sigma points in measurement space

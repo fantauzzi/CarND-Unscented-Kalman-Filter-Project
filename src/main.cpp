@@ -34,21 +34,19 @@ int main() {
 
 	uWS::Hub h;
 
-	// Create a Kalman Filter instance
 	UKF ukf;
 
-	// used to compute the RMSE later
-	Tools tools;
 	vector<VectorXd> estimations;
 	vector<VectorXd> ground_truth;
 
+	// Open the output text file where information for reporting will be saved
 	ofstream outputFile;
 	outputFile.open("data/out.txt", ofstream::trunc);
 	assert(outputFile.is_open());
 
-	unsigned iteration {0};
+	unsigned iteration {0};  // Iteration counter, useful for debugging
 	h.onMessage(
-			[&outputFile, &iteration, &ukf,&tools,&estimations,&ground_truth](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length, uWS::OpCode opCode) {
+			[&outputFile, &iteration, &ukf,&estimations,&ground_truth](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length, uWS::OpCode opCode) {
 				// "42" at the start of the message means there's a websocket message event.
 				// The 4 signifies a websocket message
 				// The 2 signifies a websocket event
@@ -115,37 +113,35 @@ int main() {
 							gt_values(3) = vy_gt;
 							ground_truth.push_back(gt_values);
 
-							//Call ProcessMeasurment(meas_package) for Kalman filter
-							// cout << "Iteration# " << iteration << endl;
 							ukf.processMeasurement(meas_package);
 							++ iteration;
 
-							//Push the current estimated x,y positon from the Kalman filter's state vector
-
+							// Fetch the current estimated state from the Kalman filter's state vector
 							auto state = ukf.getState();
 							VectorXd estimate(4);
-
 							double p_x = state(0);
 							double p_y = state(1);
 							double v = state(2);
 							double yaw = state(3);
 							double yawRate = state(4);
+
+							// Fetch the latest computed NIS
 							double nis = ukf.getNIS();
 
+							// Output informatio to text file for off-line reporting
 							outputFile << timestamp << '\t' << p_x << '\t' << p_y << '\t' << v << '\t' << yaw << '\t' << yawRate << '\t' << nis << endl;
 							outputFile.flush();
 
+							// Update the estimations vector
 							double v1 = cos(yaw)*v;
 							double v2 = sin(yaw)*v;
-
 							estimate(0) = p_x;
 							estimate(1) = p_y;
 							estimate(2) = v1;
 							estimate(3) = v2;
-
 							estimations.push_back(estimate);
 
-							VectorXd RMSE = tools.calculateRMSE(estimations, ground_truth);
+							VectorXd RMSE = calculateRMSE(estimations, ground_truth);
 
 							json msgJson;
 							msgJson["estimate_x"] = p_x;
@@ -155,7 +151,6 @@ int main() {
 							msgJson["rmse_vx"] = RMSE(2);
 							msgJson["rmse_vy"] = RMSE(3);
 							auto msg = "42[\"estimate_marker\"," + msgJson.dump() + "]";
-							// std::cout << msg << std::endl;
 							ws.send(msg.data(), msg.length(), uWS::OpCode::TEXT);
 
 						}

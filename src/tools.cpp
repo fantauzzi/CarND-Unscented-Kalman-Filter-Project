@@ -3,15 +3,10 @@
 
 using Eigen::VectorXd;
 using Eigen::MatrixXd;
-using std::vector;
+using std::cout;
+using std::endl;
 
-Tools::Tools() {
-}
-
-Tools::~Tools() {
-}
-
-VectorXd Tools::calculateRMSE(const vector<VectorXd> &estimations, const vector<VectorXd> &groundTruth) {
+VectorXd calculateRMSE(const vector<VectorXd> &estimations, const vector<VectorXd> &groundTruth) {
 	VectorXd rmse(4);
 	rmse.setZero();
 	// Check the validity of the input parameters
@@ -22,19 +17,20 @@ VectorXd Tools::calculateRMSE(const vector<VectorXd> &estimations, const vector<
 		return rmse;
 	}
 
-	//accumulate squared residuals
+	// Accumulate squared residuals into rmse
 	for (unsigned int i = 0; i < estimations.size(); ++i) {
 		VectorXd residual = estimations[i] - groundTruth[i];
 		residual = residual.array().pow(2);
 		rmse += residual;
 	}
 
-	rmse = rmse / estimations.size();
+	rmse /= estimations.size();
 	rmse = rmse.array().sqrt();
 
 	return rmse;
 }
 
+
 double normaliseAngle(const double angle) {
-	return atan2(sin(angle), cos(angle));
+	return atan2(sin(angle), cos(angle));  // Not the most efficient way, but neat!
 }

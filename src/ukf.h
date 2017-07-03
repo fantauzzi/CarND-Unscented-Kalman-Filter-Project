@@ -13,14 +13,14 @@ using std::pair;
 using std::tuple;
 
 class UKF {
-	/*
-	 * Sets initial state (x) and its covariance (P) based on given measurement. For initialisation only, the given
-	 * measurement is used whether it is radar or lidar, even if the UKF was directed to ignore radar
-	 * or lidar measurements.
-	 * Also sets the number of components in state and augmented state vector (x_n and xAug_n respectively);
-	 * sets the standard deviation for acceleration and yaw acceleration (std_a and std_yawdd); sets the
-	 * standard deviation for radar measurements (std_radr, std_radphi, std_radrd); initializes the weights
-	 * (weights); sets isInitialised to True.
+	/**
+	 */
+	/**
+	 * Sets initial state (data member x) and its covariance (data member P) based on given measurement.
+	 * Because it is initialisation, the given measurement is used whether it is radar or lidar, even if
+	 * the UKF was directed to ignore radar or lidar measurements.
+	 * Sets the isInitialised data memeber to True.
+	 * @param meas_package the latest measurements collected from either lidar or radar.
 	 */
 	void init(MeasurementPackage meas_package);
 
@@ -28,7 +28,7 @@ class UKF {
 	bool isInitialised;
 
 	// If set to false, laser measurements will be ignored (except for initialisation)
-	bool useLaser;
+	bool useLidar;
 
 	// if set to false, radar measurements will be ignored (except for initialisation)
 	bool useRadar;
@@ -75,49 +75,119 @@ class UKF {
 	// Number of dimension in augmnented state vector
 	const int xAug_n;
 
-	/* Compute the sigma points of the non-augmented state vector; useful for testing, not
+	/**
+	 * Computes the sigma points of the non-augmented state vector; useful for testing, not
 	 * actually used by the UKF.
+	 * @return a amtrix whose columns are the sigma points.
 	 */
-	MatrixXd computeSigmaPoints();
+	MatrixXd computeSigmaPoints() const;
 
-	/* Determine augmented sigma points based on current state, covariance, noise standard deviation for
-	 * longitudinal acceleration and yaw acceleration and lambda
+	/**
+	 * Determines the augmented sigma points based on current state, covariance, noise standard
+	 * deviation for longitudinal acceleration and yaw acceleration.
+	 * @return A matrix whose columns are the augmented sigma points
 	 */
-	MatrixXd computeAugmentedSigmaPoints();
+	MatrixXd computeAugmentedSigmaPoints() const;
 
-	/*
-	 * Predict sigma points based on augmented sigma points.
+	/**
+	 * Predicts values for given augmented sigma points after a time interval.
+	 * @param XsigAug the augmented sigma points, at the beginning of the time interval.
+	 * @param deltaT the time interval.
+	 * @return a matrix whose columns are the predicted augmented sigma points.
 	 */
-	MatrixXd predictSigmaPoints(const MatrixXd & XsigAug, double deltaT);
+	MatrixXd predictSigmaPoints(const MatrixXd & XsigAug, double deltaT) const;
 
-	/*
-	 * Predict expected state and covariance based on predicted sigma points
+	/**
+	 * Determines the expected state and covariance based on given predicted sigma points.
+	 * @param XsigPred the predicted, augmented sigma points. The method updates the
+	 * object data members x and P.
+	 * @return a pair whose first element is the expected state vector, and second element
+	 * is the covariance matrix.
 	 */
-	pair<MatrixXd, MatrixXd> predictStateAndCovariance(const MatrixXd & XsigPred);
+	pair<VectorXd, MatrixXd> predictStateAndCovariance(const MatrixXd & XsigPred);
 
-	pair<VectorXd, MatrixXd>  predictMeasurements(const MatrixXd & Zsig, const MatrixXd & R);
+	/**
+	 * Determines the expected value of the next measurements, based on given predicted sigma
+	 * points in measurements space, and the sensor noise covariance.
+	 * @param Zsig a matrix whose columns are the predicted, augmented sigma points, expressed in
+	 * the measurements space.
+	 * @param R the sensor noise covariance matrix.
+	 * @return a pair whose first element is a vector with the measurements expected value, and
+	 * whose second element is its covariance matrix.
+	 */
+	pair<VectorXd, MatrixXd>  predictMeasurements(const MatrixXd & Zsig, const MatrixXd & R) const;
 
-	tuple<VectorXd, MatrixXd, MatrixXd>  predictRadarMeasurments(const MatrixXd & XsigPred);
+	/**
+	 * Determines the expected value of the next radar measurements, based on given predicted
+	 * sigma points.
+	 * @param XsigPred a matrix whose columns are the predicted sigma points.
+	 * @return a triple: the first element is the vector of measurements expected values;
+	 * the second element is a matrix whose columns are the sigma points in measurements
+	 * space; the third element is the expected values covariance matrix.
+	 */
+	tuple<VectorXd, MatrixXd, MatrixXd>  predictRadarMeasurments(const MatrixXd & XsigPred) const;
 
-	tuple<VectorXd, MatrixXd, MatrixXd>  predictLidarMeasurments(const MatrixXd & XsigPred);
+	/**
+	 * Determines the expected value of the next lidar measurements, based on given predicted
+	 * sigma points.
+	 * @param XsigPred a matrix whose columns are the predicted sigma points.
+	 * @return a triple: the first element is the vector of measurements expected values;
+	 * the second element is a matrix whose columns are the sigma points in measurements
+	 * space; the third element is the expected values covariance matrix.
+	 */
+	tuple<VectorXd, MatrixXd, MatrixXd>  predictLidarMeasurments(const MatrixXd & XsigPred) const;
 
+	/**
+	 * Updates the currently predicted state x, and its covariance P, based on the lates sensor measurments.
+	 * Also computes the NIS. The method updates the object data members x, P and nis.
+	 * @param meas_package the latest sensor measurements, to be used for update.
+	 * @param zPred the measurements expected value (predicted value), as returned by predictLidarMeasurments() or
+	 * predictRadarMeasurments().
+	 * @param Zsig the sigma points in measurements space, as returned by predictLidarMeasurments() or
+	 * predictRadarMeasurments().
+	 * @param S the covariance for the measurements expected value (predicted value), as returned by
+	 * predictLidarMeasurments() or predictRadarMeasurments().
+	 * @param XsigPred the predicted augmented sigma points, as returned by predictSigmaPoints().
+	 * @return a triple: the first element is the updated state vector; the second element is the updated state
+	 * covariance; the third is the computed NIS.
+	 */
 	tuple<VectorXd, MatrixXd, double> updateStateWithMeasurements(const MeasurementPackage & meas_package, const VectorXd & zPred, const MatrixXd & Zsig, const MatrixXd & S, const MatrixXd & XsigPred);
 
 public:
 	UKF();
 
+	UKF(const bool useRadar, const bool useLidar);
+
 	virtual ~UKF();
 
-	// Execute unit-test
-	void test();
-
+	/**
+	 * Fetches the filter current state.
+	 * @return a copy of the state vector.
+	 */
 	VectorXd getState() const;
 
+	/**
+	 * Fetches the filter current state covariance.
+	 * @return a copy of the covariance matrix.
+	 */
+	MatrixXd getCovariance() const;
+
+	/**
+	 * Fetches the latest computed NIS value, 0 if never computed.
+	 * @return the latest computed NIS value.
+	 */
 	double getNIS() const;
 
 	/**
-	 * ProcessMeasurement
-	 * @param meas_package The latest measurement data of either radar or laser
+	 * Process the given measurements in the Unscented Kalman Filter, and updates the object
+	 * data members x, P and nis. Result of the processing can be retrieved with subsequent
+	 * calls to methods getState() and getNIS().
+	 * @param meas_package The latest measurement data coming from either radar or lidar.
 	 */
 	void processMeasurement(MeasurementPackage meas_package);
+
+	/**
+	 * Execute unit-test, for debugging.
+	 */
+	void test();
 };
