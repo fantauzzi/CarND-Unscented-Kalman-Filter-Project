@@ -43,9 +43,10 @@ class UKF {
 	and their covariance, and calculation of the cross-correlation matrix. */
 	VectorXd weights;
 
-	// The NIS
+	// The last computed NIS (defaults to 0 if not yet computed)
 	double nis;
 
+	// Time-stamp of the last update; in microseconds from an epoch
 	long long previousTimeStamp;
 
 	// Process noise standard deviation longitudinal acceleration in m/s^2
@@ -54,10 +55,10 @@ class UKF {
 	// Process noise standard deviation yaw acceleration in rad/s^2
 	const double std_yawdd;
 
-	// Laser measurement noise standard deviation position1 in m
+	// Laser measurement noise standard deviation position x in m
 	const double std_laspx;
 
-	// Laser measurement noise standard deviation position2 in m
+	// Laser measurement noise standard deviation position y in m
 	const double std_laspy;
 
 	// Radar measurement noise standard deviation radius in m
@@ -93,13 +94,13 @@ class UKF {
 	 * Predicts values for given augmented sigma points after a time interval.
 	 * @param XsigAug the augmented sigma points, at the beginning of the time interval.
 	 * @param deltaT the time interval.
-	 * @return a matrix whose columns are the predicted augmented sigma points.
+	 * @return a matrix whose columns are the predicted sigma points.
 	 */
 	MatrixXd predictSigmaPoints(const MatrixXd & XsigAug, double deltaT) const;
 
 	/**
 	 * Determines the expected state and covariance based on given predicted sigma points.
-	 * @param XsigPred the predicted, augmented sigma points. The method updates the
+	 * @param XsigPred the predicted sigma points. The method updates the
 	 * object data members x and P.
 	 * @return a pair whose first element is the expected state vector, and second element
 	 * is the covariance matrix.
@@ -109,7 +110,7 @@ class UKF {
 	/**
 	 * Determines the expected value of the next measurements, based on given predicted sigma
 	 * points in measurements space, and the sensor noise covariance.
-	 * @param Zsig a matrix whose columns are the predicted, augmented sigma points, expressed in
+	 * @param Zsig a matrix whose columns are the predicted sigma points, expressed in
 	 * the measurements space.
 	 * @param R the sensor noise covariance matrix.
 	 * @return a pair whose first element is a vector with the measurements expected value, and
@@ -138,7 +139,7 @@ class UKF {
 	tuple<VectorXd, MatrixXd, MatrixXd>  predictLidarMeasurments(const MatrixXd & XsigPred) const;
 
 	/**
-	 * Updates the currently predicted state x, and its covariance P, based on the lates sensor measurments.
+	 * Updates the currently predicted state x, and its covariance P, based on the latest sensor measurments.
 	 * Also computes the NIS. The method updates the object data members x, P and nis.
 	 * @param meas_package the latest sensor measurements, to be used for update.
 	 * @param zPred the measurements expected value (predicted value), as returned by predictLidarMeasurments() or
@@ -147,7 +148,7 @@ class UKF {
 	 * predictRadarMeasurments().
 	 * @param S the covariance for the measurements expected value (predicted value), as returned by
 	 * predictLidarMeasurments() or predictRadarMeasurments().
-	 * @param XsigPred the predicted augmented sigma points, as returned by predictSigmaPoints().
+	 * @param XsigPred the predicted sigma points, as returned by predictSigmaPoints().
 	 * @return a triple: the first element is the updated state vector; the second element is the updated state
 	 * covariance; the third is the computed NIS.
 	 */

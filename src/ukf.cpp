@@ -233,7 +233,7 @@ MatrixXd UKF::predictSigmaPoints(const MatrixXd & XsigAug, double deltaT) const 
 
 pair<VectorXd, MatrixXd> UKF::predictStateAndCovariance(
 		const MatrixXd & XsigPred) {
-	// Determine the predicted state x based on augmented sigma-points and pre-computed weights
+	// Determine the predicted state x based on predicted sigma-points and pre-computed weights
 	x.setZero();
 	for (auto i = 0; i < 2 * xAug_n + 1; ++i)
 		x += weights(i) * XsigPred.col(i);

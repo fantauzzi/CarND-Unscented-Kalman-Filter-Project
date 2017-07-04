@@ -69,7 +69,7 @@ if __name__ == '__main__':
     count_above_radar_nis_threshold=0
     count_above_lidar_nis_threshold = 0
     radar_nis_threshold = 7.815
-    lidar_nis_threshold = 9.488
+    lidar_nis_threshold = 5.991 #9.488
     prev_v_gt = None
     prev_yaw_rate_gt = None
     prev_timestamp=None
