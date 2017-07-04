@@ -41,7 +41,7 @@ int main() {
 
 	// Open the output text file where information for reporting will be saved
 	ofstream outputFile;
-	outputFile.open("data/out.txt", ofstream::trunc);
+	outputFile.open("../data/out.txt", ofstream::trunc);
 	assert(outputFile.is_open());
 
 	unsigned iteration {0};  // Iteration counter, useful for debugging
